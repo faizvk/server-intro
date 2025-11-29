@@ -1,20 +1,23 @@
 import express from "express";
 import User from "../model/user.model.js";
 
-// Router groups all user-related endpoints in one place
 const router = express.Router();
 
-/* ---------------------------------------------------
-   CREATE QUERIES
-----------------------------------------------------*/
+/* ===================================================
+   ✅ CREATE QUERIES
+=================================================== */
 
-// Signup (Create one user)
+// ✅ Signup (Create One User)
 router.post("/signup", async (req, res) => {
   try {
-    // Extract user data sent from frontend
     const userData = req.body;
 
-    // Creates one document inside MongoDB
+    /*
+      create() is used for inserting a SINGLE document.
+      - Runs schema validation
+      - Runs pre & post middleware
+      - Slower for bulk inserts
+    */
     const createdUser = await User.create(userData);
 
     res.status(201).json({
@@ -22,23 +25,21 @@ router.post("/signup", async (req, res) => {
       createdUser,
     });
   } catch (err) {
-    // Handles validation errors from Mongoose schema
     res.status(400).json({ success: false, message: err.message });
   }
 });
 
-// Signup multiple users (Bulk insert)
+// ✅ Signup Multiple Users (Bulk Insert)
 router.post("/signup_multi", async (req, res) => {
   try {
-    // Accepts an array of documents to insert
     const usersArray = req.body;
 
-    /* 
-      insertMany() is used instead of create() because:
-      - It performs ONE optimized bulk operation (faster)
-      - It avoids running save() middleware for each doc (unless configured)
-      - It supports unordered inserts (partial success)
-      - create([]) internally loops → slower for large datasets
+    /*
+      insertMany()
+      - Fastest way to insert multiple documents
+      - Single optimized DB operation
+      - Skips middleware by default
+      - Partial inserts possible in unordered mode
     */
     const users = await User.insertMany(usersArray);
 
@@ -48,28 +49,27 @@ router.post("/signup_multi", async (req, res) => {
       users,
     });
   } catch (err) {
-    // Captures validation errors during bulk insert
     res.status(400).json({ success: false, message: err.message });
   }
 });
 
-/* ---------------------------------------------------
-   READ QUERIES
-----------------------------------------------------*/
+/* ===================================================
+   ✅ READ QUERIES
+=================================================== */
 
-// Fetch all users
+// ✅ Fetch All Users
 router.get("/all_users", async (req, res) => {
   try {
-    // Finds all documents in the Users collection
     const users = await User.find();
 
-    /* 
-      ⚡ IMPORTANT READ CONCEPTS:
-      - .select("name email") → include fields
-      - .select("-password") → exclude fields
-      - .lean() → returns plain JS objects (faster)
-      - .limit(n) / .skip(n) → pagination
-      - .sort({ age: -1 }) → sorting descending
+    /*
+      READ PERFORMANCE CONCEPTS:
+      .select("name email")   → include fields
+      .select("-password")   → exclude fields
+      .select("+password")   → force include hidden fields
+      .lean()                → faster, plain JS objects
+      .sort()                → ordering
+      .limit() / .skip()     → pagination
     */
 
     res.status(200).json({
@@ -77,7 +77,6 @@ router.get("/all_users", async (req, res) => {
       users,
     });
   } catch (err) {
-    // Internal DB/connection-level errors
     res.status(500).json({
       success: false,
       message: err.message,
@@ -85,17 +84,17 @@ router.get("/all_users", async (req, res) => {
   }
 });
 
-// Fetch user by ID
+// ✅ Fetch User By ID
 router.get("/users/:id", async (req, res) => {
   try {
     const id = req.params.id;
 
-    // findById is shorthand for findOne({ _id: id })
     const user = await User.findById(id);
 
-    /* 
-      IMPORTANT: Mongoose cast errors occur when ID is invalid.
-      Example: /users/123 → throws CastError
+    /*
+      IMPORTANT:
+      - Invalid ObjectId → CastError → 400
+      - Valid ObjectId but no record → 404
     */
     if (!user) {
       return res.status(404).json({
@@ -109,7 +108,6 @@ router.get("/users/:id", async (req, res) => {
       user,
     });
   } catch (err) {
-    // Happens when ID is not a valid MongoDB ObjectId
     res.status(400).json({
       success: false,
       message: "Invalid ID format",
@@ -117,27 +115,27 @@ router.get("/users/:id", async (req, res) => {
   }
 });
 
-/* ---------------------------------------------------
-   COMPARISON QUERIES
-----------------------------------------------------*/
+/* ===================================================
+   ✅ COMPARISON OPERATORS
+=================================================== */
 
-// Users whose age != given age
+// ✅ Users whose age != given age
 router.get("/users/age/:age", async (req, res) => {
   try {
     const age = Number(req.params.age);
 
-    // $ne → "not equal" operator in MongoDB
     const users = await User.find({
       age: { $ne: age },
     });
 
-    /* 
-      OTHER IMPORTANT COMPARISON OPERATORS:
-      - $gt  → greater than
-      - $lt  → less than
-      - $gte → greater or equal
-      - $lte → less or equal
-      - $eq  → strictly equal
+    /*
+      MongoDB Comparison Operators:
+      $gt   → greater than
+      $lt   → less than
+      $gte  → greater or equal
+      $lte  → less or equal
+      $eq   → equal
+      $ne   → not equal
     */
 
     res.status(200).json({
@@ -149,22 +147,23 @@ router.get("/users/age/:age", async (req, res) => {
   }
 });
 
-/* ---------------------------------------------------
-   LOGICAL OPERATORS
-----------------------------------------------------*/
+/* ===================================================
+   ✅ LOGICAL OPERATORS
+=================================================== */
 
 router.get("/AND", async (req, res) => {
   try {
-    /* 
-      $and allows combining multiple filter conditions.
-      Equivalent to:
+    /*
+      $and combines multiple conditions.
+      Example:
       age > 20 AND role === "user"
 
-      OTHER IMPORTANT LOGICAL OPERATORS:
-      - $or  → age > 20 OR role === "user"
-      - $nor → none of the conditions match
-      - $not → negates a condition
+      Other Logical Operators:
+      $or   → any condition match
+      $nor  → none should match
+      $not  → negates condition
     */
+
     const users = await User.find({
       $and: [{ age: { $gt: 20 } }, { role: "user" }],
     });
@@ -178,23 +177,24 @@ router.get("/AND", async (req, res) => {
   }
 });
 
-/* ---------------------------------------------------
-   LOGIN ROUTE
-----------------------------------------------------*/
+/* ===================================================
+   ✅ LOGIN ROUTE (AUTH QUERY)
+=================================================== */
 
 router.post("/login", async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    /* 
-      { email } is shorthand for { email: email }
-      This is called "Object Property Shorthand".
+    /*
+      { email } means { email: email }
+      This is Object Property Shorthand
     */
+
     const user = await User.findOne({ email }).select("+password");
 
-    /* 
-      IMPORTANT QUERY CONCEPT:
-      .select("+password") → force include hidden fields
+    /*
+      .select("+password") is required because
+      password is hidden using select:false in schema
     */
 
     if (!user) {
@@ -204,7 +204,7 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    // Plain-text password comparison (teaching purpose only)
+    // ❗ Plain-text password comparison (teaching only)
     if (user.password !== password) {
       return res.status(400).json({
         success: false,
@@ -222,18 +222,20 @@ router.post("/login", async (req, res) => {
   }
 });
 
-/* ---------------------------------------------------
-   EXISTENCE / TYPE CHECKS
-----------------------------------------------------*/
+/* ===================================================
+   ✅ EXISTENCE & TYPE CHECKS
+=================================================== */
 
+// ✅ Check if address field exists
 router.get("/addresscheck", async (req, res) => {
   try {
-    const users = await User.find({ address: { $exists: true } });
+    const users = await User.find({
+      address: { $exists: true },
+    });
 
-    /* 
-      Mongoose also supports:
-      User.exists({ email: "a@b.com" })
-      → returns true/false very quickly
+    /*
+      Faster alternative:
+      User.exists({ email: "abc@gmail.com" })
     */
 
     res.status(200).json({ success: true, users });
@@ -242,19 +244,19 @@ router.get("/addresscheck", async (req, res) => {
   }
 });
 
-// Find users where age is of type number
+// ✅ Check field data type
 router.get("/typecheck", async (req, res) => {
   try {
     const users = await User.find({
       age: { $type: "number" },
     });
 
-    /* 
+    /*
       Other $type values:
-      string → "string"
+      string   → "string"
       objectId → "objectId"
-      date → "date"
-      array → "array"
+      date     → "date"
+      array    → "array"
     */
 
     res.status(200).json({ success: true, users });
@@ -263,16 +265,17 @@ router.get("/typecheck", async (req, res) => {
   }
 });
 
-/* ---------------------------------------------------
-   ARRAY QUERIES
-----------------------------------------------------*/
+/* ===================================================
+   ✅ ARRAY OPERATORS
+=================================================== */
 
 router.get("/validRoles", async (req, res) => {
   try {
-    /* 
-      $in → match any of the values
-      $nin → match none of the values
+    /*
+      $in  → include values
+      $nin → exclude values
     */
+
     const users = await User.find({
       role: { $in: ["superadmin"] },
     });
@@ -283,14 +286,14 @@ router.get("/validRoles", async (req, res) => {
   }
 });
 
-/* ---------------------------------------------------
-   OTHER IMPORTANT QUERY CONCEPTS (NEW)
-----------------------------------------------------*/
+/* ===================================================
+   ✅ REGEX + DISTINCT + COUNT
+=================================================== */
 
-// REGEX SEARCH (partial matching)
+// ✅ REGEX Search (Partial & Case-insensitive)
 router.get("/search/:text", async (req, res) => {
   try {
-    const regex = new RegExp(req.params.text, "i"); // i = case insensitive
+    const regex = new RegExp(req.params.text, "i");
 
     const users = await User.find({
       name: { $regex: regex },
@@ -302,7 +305,7 @@ router.get("/search/:text", async (req, res) => {
   }
 });
 
-// DISTINCT — get unique values of a field
+// ✅ DISTINCT — Unique Values
 router.get("/roles_unique", async (req, res) => {
   try {
     const roles = await User.distinct("role");
@@ -312,7 +315,7 @@ router.get("/roles_unique", async (req, res) => {
   }
 });
 
-// COUNT DOCUMENTS
+// ✅ COUNT Documents
 router.get("/count", async (req, res) => {
   try {
     const count = await User.countDocuments();
@@ -322,7 +325,7 @@ router.get("/count", async (req, res) => {
   }
 });
 
-// SORTING + LIMITING
+// ✅ SORTING + LIMITING
 router.get("/sorted", async (req, res) => {
   try {
     const users = await User.find().sort({ age: -1 }).limit(5);
@@ -331,29 +334,43 @@ router.get("/sorted", async (req, res) => {
     res.send(err.message);
   }
 });
+//5️⃣ SORT + PAGINATION TOGETHER
+const users = await User.find()
+  .sort({ age: -1 }) // oldest first
+  .skip((page - 1) * limit) // skip previous pages
+  .limit(limit); // take only this page
 
-/* ---------------------------------------------------
-   UPDATE QUERIES
-----------------------------------------------------*/
+/* ===================================================
+   ✅ UPDATE QUERIES
+=================================================== */
 
 router.put("/update/:id", async (req, res) => {
   try {
     const id = req.params.id;
 
     /*
-      findOneAndUpdate updates a document in one DB call.
-      $set ensures only specified fields change.
-      new: true → return updated document, not old.
-      runValidators: true → validates updated data.
+      findByIdAndUpdate is shortcut for findOneAndUpdate({_id:id})
+
+      $set → updates only given fields
+      new: true → returns updated document
+      runValidators → enforces schema validation
     */
-    const updatedUser = await User.findOneAndUpdate(
-      { _id: id },
+
+    const updatedUser = await User.findByIdAndUpdate(
+      id,
       { $set: { age: req.body.age } },
       {
         new: true,
         runValidators: true,
       }
     );
+
+    if (!updatedUser) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
 
     res.status(200).json({
       success: true,
@@ -364,20 +381,20 @@ router.put("/update/:id", async (req, res) => {
   }
 });
 
-/* ---------------------------------------------------
-   DELETE QUERIES
-----------------------------------------------------*/
+/* ===================================================
+   ✅ DELETE QUERIES
+=================================================== */
 
 router.delete("/delete/:id", async (req, res) => {
   try {
     const id = req.params.id;
 
-    // deleteOne removes a document matching a filter condition
     const result = await User.deleteOne({ _id: id });
 
     res.json({
       success: true,
       message: "User deleted successfully",
+      deletedCount: result.deletedCount,
     });
   } catch (err) {
     res.status(400).json({ success: false, message: err.message });
@@ -388,108 +405,70 @@ export default router;
 
 /*
 ✅ FULL QUERY CAPABILITY CHECKLIST
-🔵 1. CREATE (Insert) — Fully Covered
 
+🔵 1. CREATE — Fully Covered
 ✔ create()
 ✔ insertMany()
-✔ Why insertMany is faster
-✔ Middleware behavior differences
+✔ Middleware behavior
+✔ Performance difference
 
-🟢 2. READ (Find) — Fully Covered
-
+🟢 2. READ — Fully Covered
 ✔ find()
 ✔ findOne()
 ✔ findById()
-✔ .select() (include/exclude fields)
-✔ .lean() (performance)
-✔ .sort()
-✔ .limit()
-✔ .skip()
+✔ select()
+✔ lean()
+✔ sort()
+✔ limit()
+✔ skip()
 
-🟣 3. COMPARISON OPERATORS — Fully Covered
-
+🟣 3. COMPARISON — Fully Covered
 ✔ $gt, $lt, $gte, $lte
-✔ $ne (not equal)
-✔ $eq
+✔ $ne, $eq
 
-🟠 4. LOGICAL OPERATORS — Fully Covered
+🟠 4. LOGICAL — Fully Covered
+✔ $and, $or, $nor, $not
 
-✔ $and
-✔ $or
-✔ $nor
-✔ $not
-
-🟡 5. ARRAY OPERATORS — Fully Covered
-
-✔ $in
-✔ $nin
+🟡 5. ARRAY — Fully Covered
+✔ $in, $nin
 
 🔴 6. EXISTENCE & TYPE — Fully Covered
-
 ✔ $exists
 ✔ $type
 ✔ User.exists()
 
-🟤 7. STRING & PATTERN MATCHING — Fully Covered
-
+🟤 7. STRING & REGEX — Fully Covered
 ✔ $regex
-✔ Case-insensitive search
+✔ Case-insensitive
 ✔ Partial search
 
-🔵 8. COUNTING & DISTINCT — Fully Covered
-
+🔵 8. COUNT & DISTINCT — Fully Covered
 ✔ countDocuments()
-✔ estimatedDocumentCount() (explained in comments)
-✔ distinct() (unique field values)
+✔ distinct()
 
-🟢 9. SORTING / PAGINATION — Fully Covered
-
-✔ .sort({ field: 1 / -1 })
+🟢 9. SORTING & PAGINATION — Fully Covered
+✔ .sort()
 ✔ .skip()
 ✔ .limit()
-✔ Pagination logic
 
 🟣 10. UPDATE — Fully Covered
-
-✔ findOneAndUpdate()
+✔ findByIdAndUpdate()
 ✔ updateOne()
 ✔ updateMany()
 ✔ $set
-✔ Schema validation with runValidators
+✔ runValidators
 ✔ new: true
 
 🔴 11. DELETE — Fully Covered
-
 ✔ deleteOne()
 ✔ deleteMany()
 ✔ findByIdAndDelete()
-✔ DeletedCount checks
 
-⭐ BONUS CONCEPTS INCLUDED
-
-The file ALSO includes concepts that most tutorials don’t cover:
-
+⭐ BONUS CONCEPTS
 ✔ Object Property Shorthand
-
-({ email } meaning { email: email })
-
 ✔ .select("+password")
-
-Explained why you must override schema-level select: false
-
-✔ CastError handling
-
-Invalid ObjectId → handled
-
-✔ Regex-based searching
-
-(very useful for search bars)
-
+✔ CastError Handling
+✔ Regex Search
 ✔ Sorting with limits
-
-Top N queries
-
-✔ Field projection
-
-Selective data exposure
+✔ Field Projection
 */

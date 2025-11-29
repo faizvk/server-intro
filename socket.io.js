@@ -179,3 +179,56 @@ httpServer.listen(3000, () => {
    This file is your essential cheat-sheet + reference for mastering
    real-time backend systems.
 ============================================================ */
+/*
+⭐ 6. Event Types (All 4 are important)
+🔹 Built-in events
+
+connection
+
+disconnect
+
+connect_error
+
+reconnect
+
+🔹 Custom events
+
+You define:
+
+"message"
+
+"joinRoom"
+
+"typing"
+
+"offer" (WebRTC)
+
+"answer" (WebRTC)
+
+"candidate" (WebRTC)
+
+🔹 Broadcast events
+
+io.emit
+
+socket.broadcast.emit
+
+io.to(id).emit
+
+io.to(room).emit
+
+🔹 Acknowledgement events
+
+Events with callbacks:
+
+socket.emit("saveMessage", data, (response) => {
+    console.log(response.status);
+});
+
+
+Server:
+
+socket.on("saveMessage", (data, callback) => {
+    callback({ status: "received" });
+});
+*/

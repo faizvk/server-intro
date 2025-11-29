@@ -16,8 +16,6 @@ pids
 *.pid.lock
 
 # dotenv environment variables file
-.env
-.env.local
 .env.development.local
 .env.test.local
 .env.production.local
@@ -52,3 +50,4 @@ uploads/
 
 # Optional: If you use PM2
 .pmx
+config.bat
